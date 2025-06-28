@@ -108,11 +108,11 @@ function App() {
     }
     setLoading(true);
     try {
-      const response = await axios.post('http://localhost:8000/api/tts', {
-        text: textInput,
-        voice_id: voiceId,
-      }, {
-        headers: { 'Content-Type': 'application/json' },
+      const formData = new FormData();
+      formData.append('text', textInput);
+      formData.append('voice_id', voiceId);
+      const response = await axios.post('http://localhost:8000/api/tts', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       setAudioUrl(response.data.audioUrl || '');
       await new Promise(resolve => setTimeout(resolve, 100));
