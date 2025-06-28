@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
-import { Moon, Sun, Loader2 } from 'lucide-react'; // Added Loader2 for spinner
+import { Moon, Sun, Loader2 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import WaveSurfer from 'wavesurfer.js';
 import axios from 'axios';
@@ -18,10 +18,12 @@ function App() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [audioUrl, setAudioUrl] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [loading, setLoading] = useState(false); // New state for loader
+  const [loading, setLoading] = useState(false);
+  const [language, setLanguage] = useState('en-US'); // Default language
+  const [voice, setVoice] = useState('natalie'); // Default voice
   const waveformRef = useRef(null);
   const wavesurfer = useRef(null);
-  const playbackRef = useRef(null); // Ref for playback section
+  const playbackRef = useRef(null);
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
@@ -53,64 +55,77 @@ function App() {
   });
 
   const handlePdfSubmit = async () => {
-  if (pdfFile) {
-    setLoading(true); // Start loader
-    const formData = new FormData();
-    formData.append('file', pdfFile);
-    formData.append('language', 'en-US');
-    formData.append('voice', 'natalie');
-    try {
-      const response = await axios.post('http://localhost:8000/api/pdf', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      console.log('Audio URL:', response.data.audioUrl);
-      setAudioUrl(response.data.audioUrl);
-      // Wait for DOM to update and scroll
-      await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
-      if (playbackRef.current) {
-        playbackRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else {
-        console.error('Playback ref is not available');
+    if (pdfFile) {
+      setLoading(true);
+      const formData = new FormData();
+      formData.append('file', pdfFile);
+      formData.append('language', language);
+      formData.append('voice', voice);
+      try {
+        const response = await axios.post('http://localhost:8000/api/pdf', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        console.log('Audio URL:', response.data.audioUrl);
+        setAudioUrl(response.data.audioUrl);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (playbackRef.current) {
+          playbackRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          console.error('Playback ref is not available');
+        }
+      } catch (error) {
+        console.error('Error narrating PDF:', error);
+        alert('Failed to narrate PDF. Check console for details.');
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error narrating PDF:', error);
-      alert('Failed to narrate PDF. Check console for details.');
-    } finally {
-      setLoading(false); // Stop loader
+    } else {
+      alert('Please upload a PDF first.');
     }
-  } else {
-    alert('Please upload a PDF first.');
-  }
-};
+  };
 
   const handleTextSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     try {
       const response = await axios.post('http://localhost:8000/api/tts', {
         text: textInput,
-        language: 'en-US',
-        voice: 'male',
+        language,
+        voice,
       });
       setAudioUrl(response.data.audioUrl || '');
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (playbackRef.current) {
+        playbackRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     } catch (error) {
       console.error('API error:', error);
       alert('Backend not available yet');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleYoutubeSubmit = async (e) => {
     e.preventDefault();
     if (youtubeUrl.includes('youtube.com')) {
+      setLoading(true);
       try {
         const response = await axios.post('http://localhost:8000/api/youtube', {
           url: youtubeUrl,
-          language: 'en-US',
-          voice: 'male',
+          language,
+          voice,
         });
         setAudioUrl(response.data.audioUrl || '');
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (playbackRef.current) {
+          playbackRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       } catch (error) {
         console.error('API error:', error);
         alert('Backend not available yet');
+      } finally {
+        setLoading(false);
       }
     } else {
       alert('Please enter a valid YouTube URL');
@@ -210,8 +225,28 @@ function App() {
                 onChange={(e) => setYoutubeUrl(e.target.value)}
                 className="w-full max-w-md mx-auto bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
               />
-              <Button type="submit" className="w-full max-w-md mx-auto bg-blue-600 text-white hover:bg-blue-700">
-                Start Dubbing
+              <div className="flex space-x-4">
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
+                >
+                  <option value="en-US">English (US)</option>
+                  <option value="es-ES">Spanish (ES)</option>
+                  <option value="fr-FR">French (FR)</option>
+                </select>
+                <select
+                  value={voice}
+                  onChange={(e) => setVoice(e.target.value)}
+                  className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
+                >
+                  <option value="natalie">Natalie</option>
+                  <option value="john">John</option>
+                  <option value="lucia">Lucia</option>
+                </select>
+              </div>
+              <Button type="submit" className="w-full max-w-md mx-auto bg-blue-600 text-white hover:bg-blue-700" disabled={loading}>
+                {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : 'Start Dubbing'}
               </Button>
             </form>
           </motion.div>
@@ -228,6 +263,26 @@ function App() {
               {pdfFile ? pdfFile.name : 'Drag and drop a PDF, or click to select'}
             </div>
             {pdfText && <p className="text-sm mb-4 text-gray-600 dark:text-gray-400">{pdfText.substring(0, 200)}...</p>}
+            <div className="flex space-x-4 mb-4">
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
+              >
+                <option value="en-US">English (US)</option>
+                <option value="es-ES">Spanish (ES)</option>
+                <option value="fr-FR">French (FR)</option>
+              </select>
+              <select
+                value={voice}
+                onChange={(e) => setVoice(e.target.value)}
+                className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
+              >
+                <option value="natalie">Natalie</option>
+                <option value="john">John</option>
+                <option value="lucia">Lucia</option>
+              </select>
+            </div>
             <Button
               onClick={handlePdfSubmit}
               className="w-full max-w-md mx-auto bg-green-600 text-white hover:bg-green-700"
@@ -251,8 +306,28 @@ function App() {
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
               ></textarea>
-              <Button type="submit" className="w-full max-w-md mx-auto bg-purple-600 text-white hover:bg-purple-700">
-                Narrate Text
+              <div className="flex space-x-4 mb-4">
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
+                >
+                  <option value="en-US">English (US)</option>
+                  <option value="es-ES">Spanish (ES)</option>
+                  <option value="fr-FR">French (FR)</option>
+                </select>
+                <select
+                  value={voice}
+                  onChange={(e) => setVoice(e.target.value)}
+                  className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
+                >
+                  <option value="natalie">Natalie</option>
+                  <option value="john">John</option>
+                  <option value="lucia">Lucia</option>
+                </select>
+              </div>
+              <Button type="submit" className="w-full max-w-md mx-auto bg-purple-600 text-white hover:bg-purple-700" disabled={loading}>
+                {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : 'Narrate Text'}
               </Button>
             </form>
           </motion.div>
@@ -260,7 +335,7 @@ function App() {
           {/* Audio Playback */}
           {audioUrl && (
             <motion.div
-              ref={playbackRef} // Ref for scrolling
+              ref={playbackRef}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.9, duration: 0.5 }}
@@ -288,7 +363,7 @@ function App() {
             >
               <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg flex items-center">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-600 mr-2" />
-                <span className="text-lg text-gray-900 dark:text-white">Processing your PDF...</span>
+                <span className="text-lg text-gray-900 dark:text-white">Processing your request...</span>
               </div>
             </motion.div>
           )}
