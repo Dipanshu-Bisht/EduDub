@@ -42,18 +42,30 @@ function App() {
       }
   };
 
-  const { getRootProps, getInputProps } = useDropzone({ onDrop, accept: '.pdf' });
-
+const { getRootProps, getInputProps } = useDropzone({
+  onDrop,
+  accept: {
+    'application/pdf': ['.pdf'], // Explicitly accept PDF MIME type and extension
+  },
+});
   const handlePdfSubmit = async () => {
   if (pdfFile) {
     const formData = new FormData();
     formData.append('file', pdfFile);
     formData.append('language', 'en-US');
-    formData.append('voice', 'male');
-    const response = await axios.post('http://localhost:8000/api/pdf', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    setAudioUrl(response.data.audioUrl);
+    formData.append('voice', 'natalie');
+    try {
+      const response = await axios.post('http://localhost:8000/api/pdf', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      console.log('Audio URL:', response.data.audioUrl); // Debug log
+      setAudioUrl(response.data.audioUrl);
+    } catch (error) {
+      console.error('Error narrating PDF:', error);
+      alert('Failed to narrate PDF. Check console for details.');
+    }
+  } else {
+    alert('Please upload a PDF first.');
   }
 };
 
@@ -95,24 +107,30 @@ function App() {
 
   // Waveform Setup
   useEffect(() => {
-    if (waveformRef.current && audioUrl) {
-      wavesurfer.current = WaveSurfer.create({
-        container: waveformRef.current,
-        waveColor: '#4F46E5',
-        progressColor: '#3B82F6',
-        cursorColor: '#ffffff',
-        barWidth: 2,
-        height: 100,
-      });
-      if (audioUrl) wavesurfer.current.load(audioUrl);
-      wavesurfer.current.on('ready', () => {
+  if (waveformRef.current && audioUrl) {
+    wavesurfer.current = WaveSurfer.create({
+      container: waveformRef.current,
+      waveColor: '#4F46E5',
+      progressColor: '#3B82F6',
+      cursorColor: '#ffffff',
+      barWidth: 2,
+      height: 100,
+      cors: true, // Enable CORS for signed URLs
+    });
+    const loadAudio = () => {
+      wavesurfer.current.load(audioUrl).then(() => {
         wavesurfer.current.play();
+      }).catch((error) => {
+        console.error('WaveSurfer load error:', error);
       });
-      return () => {
-        if (wavesurfer.current) wavesurfer.current.destroy();
-      };
-    }
-  }, [audioUrl]);
+    };
+    loadAudio(); // Load audio after initialization
+    return () => {
+      if (wavesurfer.current) wavesurfer.current.destroy();
+    };
+  }
+}, [audioUrl]); // Dependency on audioUrl to re-run when it changes
+
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
