@@ -19,18 +19,37 @@ function App() {
   const [audioUrl, setAudioUrl] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [language, setLanguage] = useState('en-US'); // Default language
-  const [voice, setVoice] = useState('natalie'); // Default voice
+  const [voiceId, setVoiceId] = useState('en-US-ken');
+  const [voices, setVoices] = useState([]);
   const waveformRef = useRef(null);
   const wavesurfer = useRef(null);
   const playbackRef = useRef(null);
+
+  // Fetch available voices on mount
+  useEffect(() => {
+    const fetchVoices = async () => {
+      try {
+        const response = await axios.get('http://localhost:8000/api/voices');
+        if (response.data && Array.isArray(response.data)) {
+          setVoices(response.data);
+          if (!response.data.some(voice => voice.voiceId === voiceId)) {
+            setVoiceId(response.data[0]?.voiceId || 'en-US-ken');
+          }
+        } else {
+          console.error('Invalid voices response:', response.data);
+        }
+      } catch (error) {
+        console.error('Error fetching voices:', error);
+      }
+    };
+    fetchVoices();
+  }, [voiceId]);
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
     document.documentElement.classList.toggle('dark');
   };
 
-  // PDF Dropzone
   const onDrop = async (acceptedFiles) => {
     const file = acceptedFiles[0];
     setPdfFile(file);
@@ -59,8 +78,7 @@ function App() {
       setLoading(true);
       const formData = new FormData();
       formData.append('file', pdfFile);
-      formData.append('language', language);
-      formData.append('voice', voice);
+      formData.append('voice_id', voiceId);
       try {
         const response = await axios.post('http://localhost:8000/api/pdf', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
@@ -70,11 +88,9 @@ function App() {
         await new Promise(resolve => setTimeout(resolve, 100));
         if (playbackRef.current) {
           playbackRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } else {
-          console.error('Playback ref is not available');
         }
       } catch (error) {
-        console.error('Error narrating PDF:', error);
+        console.error('Error narrating PDF:', error.response ? error.response.data : error.message);
         alert('Failed to narrate PDF. Check console for details.');
       } finally {
         setLoading(false);
@@ -86,12 +102,17 @@ function App() {
 
   const handleTextSubmit = async (e) => {
     e.preventDefault();
+    if (!textInput.trim()) {
+      alert('Please enter some text to narrate.');
+      return;
+    }
     setLoading(true);
     try {
       const response = await axios.post('http://localhost:8000/api/tts', {
         text: textInput,
-        language,
-        voice,
+        voice_id: voiceId,
+      }, {
+        headers: { 'Content-Type': 'application/json' },
       });
       setAudioUrl(response.data.audioUrl || '');
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -99,8 +120,8 @@ function App() {
         playbackRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     } catch (error) {
-      console.error('API error:', error);
-      alert('Backend not available yet');
+      console.error('API error:', error.response ? error.response.data : error.message);
+      alert('Failed to narrate text. Check console for details.');
     } finally {
       setLoading(false);
     }
@@ -108,27 +129,32 @@ function App() {
 
   const handleYoutubeSubmit = async (e) => {
     e.preventDefault();
-    if (youtubeUrl.includes('youtube.com')) {
-      setLoading(true);
-      try {
-        const response = await axios.post('http://localhost:8000/api/youtube', {
-          url: youtubeUrl,
-          language,
-          voice,
-        });
-        setAudioUrl(response.data.audioUrl || '');
-        await new Promise(resolve => setTimeout(resolve, 100));
-        if (playbackRef.current) {
-          playbackRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      } catch (error) {
-        console.error('API error:', error);
-        alert('Backend not available yet');
-      } finally {
-        setLoading(false);
+    if (!youtubeUrl.trim()) {
+      alert('Please enter a YouTube URL.');
+      return;
+    }
+    if (!youtubeUrl.includes('youtube.com') && !youtubeUrl.includes('youtu.be')) {
+      alert('Please enter a valid YouTube URL.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('url', youtubeUrl);
+      formData.append('voice_id', voiceId);
+      const response = await axios.post('http://localhost:8000/api/youtube', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setAudioUrl(response.data.audioUrl || '');
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (playbackRef.current) {
+        playbackRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-    } else {
-      alert('Please enter a valid YouTube URL');
+    } catch (error) {
+      console.error('API error:', error.response ? error.response.data : error.message);
+      alert('Failed to dub YouTube video. Check console for details.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -225,26 +251,21 @@ function App() {
                 onChange={(e) => setYoutubeUrl(e.target.value)}
                 className="w-full max-w-md mx-auto bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
               />
-              <div className="flex space-x-4">
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
-                >
-                  <option value="en-US">English (US)</option>
-                  <option value="es-ES">Spanish (ES)</option>
-                  <option value="fr-FR">French (FR)</option>
-                </select>
-                <select
-                  value={voice}
-                  onChange={(e) => setVoice(e.target.value)}
-                  className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
-                >
-                  <option value="natalie">Natalie</option>
-                  <option value="john">John</option>
-                  <option value="lucia">Lucia</option>
-                </select>
-              </div>
+              <select
+                value={voiceId}
+                onChange={(e) => setVoiceId(e.target.value)}
+                className="w-full max-w-md mx-auto p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
+              >
+                {voices.length > 0 ? (
+                  voices.map((voice) => (
+                    <option key={voice.voiceId} value={voice.voiceId}>
+                      {voice.name || voice.voiceId} ({voice.locale})
+                    </option>
+                  ))
+                ) : (
+                  <option value="en-US-ken">Loading voices...</option>
+                )}
+              </select>
               <Button type="submit" className="w-full max-w-md mx-auto bg-blue-600 text-white hover:bg-blue-700" disabled={loading}>
                 {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : 'Start Dubbing'}
               </Button>
@@ -263,26 +284,21 @@ function App() {
               {pdfFile ? pdfFile.name : 'Drag and drop a PDF, or click to select'}
             </div>
             {pdfText && <p className="text-sm mb-4 text-gray-600 dark:text-gray-400">{pdfText.substring(0, 200)}...</p>}
-            <div className="flex space-x-4 mb-4">
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
-              >
-                <option value="en-US">English (US)</option>
-                <option value="es-ES">Spanish (ES)</option>
-                <option value="fr-FR">French (FR)</option>
-              </select>
-              <select
-                value={voice}
-                onChange={(e) => setVoice(e.target.value)}
-                className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
-              >
-                <option value="natalie">Natalie</option>
-                <option value="john">John</option>
-                <option value="lucia">Lucia</option>
-              </select>
-            </div>
+            <select
+              value={voiceId}
+              onChange={(e) => setVoiceId(e.target.value)}
+              className="w-full max-w-md mx-auto p-2 mb-4 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
+            >
+              {voices.length > 0 ? (
+                voices.map((voice) => (
+                  <option key={voice.voiceId} value={voice.voiceId}>
+                    {voice.name || voice.voiceId} ({voice.locale})
+                  </option>
+                ))
+              ) : (
+                <option value="en-US-ken">Loading voices...</option>
+              )}
+            </select>
             <Button
               onClick={handlePdfSubmit}
               className="w-full max-w-md mx-auto bg-green-600 text-white hover:bg-green-700"
@@ -306,26 +322,21 @@ function App() {
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
               ></textarea>
-              <div className="flex space-x-4 mb-4">
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
-                >
-                  <option value="en-US">English (US)</option>
-                  <option value="es-ES">Spanish (ES)</option>
-                  <option value="fr-FR">French (FR)</option>
-                </select>
-                <select
-                  value={voice}
-                  onChange={(e) => setVoice(e.target.value)}
-                  className="w-1/2 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
-                >
-                  <option value="natalie">Natalie</option>
-                  <option value="john">John</option>
-                  <option value="lucia">Lucia</option>
-                </select>
-              </div>
+              <select
+                value={voiceId}
+                onChange={(e) => setVoiceId(e.target.value)}
+                className="w-full max-w-md mx-auto p-2 mb-4 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
+              >
+                {voices.length > 0 ? (
+                  voices.map((voice) => (
+                    <option key={voice.voiceId} value={voice.voiceId}>
+                      {voice.name || voice.voiceId} ({voice.locale})
+                    </option>
+                  ))
+                ) : (
+                  <option value="en-US-ken">Loading voices...</option>
+                )}
+              </select>
               <Button type="submit" className="w-full max-w-md mx-auto bg-purple-600 text-white hover:bg-purple-700" disabled={loading}>
                 {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : 'Narrate Text'}
               </Button>
